@@ -1,0 +1,95 @@
+#!/usr/bin/perl
+#
+#benötigt libmail-sendmail-perl
+
+my $website_lst = "/var/local/lib/websitecheck/websitecheck.lst";
+
+my $wget = "/usr/bin/wget";
+my $hashFkt = "/usr/bin/sha1sum";
+
+if(@ARGV[0] =~ /^add$/ && @ARGV[1] =~ /http:\/\/.*/ && @ARGV[2] =~ /^\w*\@\w*[.\w]*$/) {
+  add(@ARGV[1], @ARGV[2]);
+}
+elsif (@ARGV[0] =~ /^check$/) {
+  check();
+}
+else {
+  print STDERR "Commands:\n add <http://www.xyz.de> me\@now.com\tadd Website and mail to address if it changes\n";
+  print STDERR " check\t\t\t\t\tcheck all websites for changes and mail if nessesary\n";
+  exit 1;
+}
+
+sub check {
+  use Mail::Sendmail;
+  use Fcntl;
+  use DB_File;
+  
+  open(LIST, $website_lst);
+  while(<LIST>) {
+    /^(http:\/\/.*) sha1:(.*) email:(.*)$/;
+    my $website = $1;
+    my $hash_old = $2;
+    my $email = $3;
+#    print "$website:$hash_old:$email"; 
+    my $hash_new = hash($website);
+#    if ($hash_new =~ /^$hash_old$/) {
+#      print "$website is genauso\n";
+#    }
+#    else {
+    if (! ($hash_new =~ /^$hash_old$/)) {
+#      print "$website geändert\n";
+      # email schicken
+      %mail = (
+         From => 'websitecheck <lars@home.clubdiver.info>',
+         To => "$email",
+         Subject => "Website geändert",
+         Message => "Die Seite $website wurde geändert."
+        );
+      sendmail(%mail) or die $Mail::Sendmail::error;
+      
+      # aus dem Perl Buch Seite 408
+      # neuen hash in die Datei schreiben
+      tie(@file, 'DB_File', $website_lst, O_RDWR, 0644, $DB_RECNO);
+      for $z (0 .. $#file) {
+        if (@file[$z] =~ /^$website sha1:.*$/) {
+          @file[$z] =~ s/^(http:\/\/.* sha1:).*( email:.*)$/$1$hash_new$2/;
+          last;
+        }
+      }
+      untie @file;
+    }
+  }
+}
+
+sub add {
+  my $website = @_[0];
+  my $email = @_[1];
+
+  #teste ob die seite schon in der Liste steht
+  open (LIST, "$website_lst");
+  my $add = 1;
+  while(<LIST>) {
+    if (/^$website sha1:.*/) {
+      $add = 0;
+      print "Webseite wird bereits überwacht.\n";
+      last;
+    }
+  }
+  close(LIST);
+  if ($add == 1) {
+    my $hash = hash($website);
+    open (LIST, ">> $website_lst");
+    print LIST "$website sha1:$hash email:$email\n";
+    close (LIST);
+  }
+}
+
+sub hash {
+  $website = @_[0];
+  open(HASHIP, "$wget $website -q -O - | $hashFkt |");
+  my $hash = <HASHIP>;
+  $hash =~ /^(.*)\n$/;
+  $hash = $1;
+  close(HASHIP);
+  return $hash;
+}
