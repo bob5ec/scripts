@@ -1,6 +1,6 @@
 scripts
 =======
-* websitecheck is a script which checks a website for changes and notifies you via mail if it changes
+* websitecheck is a script which checks a website for changes and notifies you via mail if it changes.
 
 * check_command.sh is a shell script which limites the access for a remote ssh connections.
 This can be used for remote plugin execution of icinga or nagios monitoring scripts. You
